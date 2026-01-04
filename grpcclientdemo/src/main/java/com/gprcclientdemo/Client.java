@@ -73,41 +73,51 @@ public class Client {
         ExecutorService executor = Executors.newSingleThreadExecutor();
 
         LocalDateTime beforProcess = LocalDateTime.now();
-        try (Connection con = DriverManager.getConnection(url, user, password);
-             PreparedStatement stmt = con.prepareStatement(query);
-             ResultSet rs = stmt.executeQuery()) {
+        try (Connection con = DriverManager.getConnection(url, user, password)) {
+            
+            // Otimizações para leitura massiva sem bloqueio de escrita (MVCC Snapshot)
+            con.setAutoCommit(false);
+            con.setReadOnly(true);
 
-            while (rs.next()) {
-                ProdutoEstoque record = new ProdutoEstoque(
-                        rs.getInt("sku_id"),
-                        rs.getInt("warehouse_id"),
-                        rs.getInt("item_id"),
-                        rs.getDouble("amount"),
-                        rs.getString("contry_code"),
-                        rs.getString("availability_type"),
-                        rs.getDouble("base_price"),
-                        rs.getString("currency_code"),
-                        rs.getTimestamp("alterado")
-                );
-                batch.add(record);
+            try (PreparedStatement stmt = con.prepareStatement(query, ResultSet.TYPE_FORWARD_ONLY, ResultSet.CONCUR_READ_ONLY)) {
+                stmt.setFetchSize(Integer.MIN_VALUE); // Habilita streaming no MySQL Connector/J
 
-                if (batch.size() >= batchSize) {
-                    List<ProdutoEstoque> batchToSend = batch;
-                    executor.submit(() -> {
-                        LocalDateTime befor = LocalDateTime.now();
-                        sendBatch(stub, batchToSend);
-                        LocalDateTime after = LocalDateTime.now();
-                        IO.println("Time for batch to be sent: " + java.time.Duration.between(befor, after).toMillis() + " ms");
-                    });
-                    batch = new ArrayList<>();
+                try (ResultSet rs = stmt.executeQuery()) {
+                    while (rs.next()) {
+                        ProdutoEstoque record = new ProdutoEstoque(
+                                rs.getInt("sku_id"),
+                                rs.getInt("warehouse_id"),
+                                rs.getInt("item_id"),
+                                rs.getDouble("amount"),
+                                rs.getString("contry_code"),
+                                rs.getString("availability_type"),
+                                rs.getDouble("base_price"),
+                                rs.getString("currency_code"),
+                                rs.getTimestamp("alterado")
+                        );
+                        batch.add(record);
+
+                        if (batch.size() >= batchSize) {
+                            List<ProdutoEstoque> batchToSend = batch;
+                            executor.submit(() -> {
+                                LocalDateTime befor = LocalDateTime.now();
+                                sendBatch(stub, batchToSend);
+                                LocalDateTime after = LocalDateTime.now();
+                                IO.println("Time for batch to be sent: " + java.time.Duration.between(befor, after).toMillis() + " ms");
+                            });
+                            batch = new ArrayList<>();
+                        }
+                    }
+
+                    // Enviar o restante
+                    if (!batch.isEmpty()) {
+                        List<ProdutoEstoque> batchToSend = batch;
+                        executor.submit(() -> sendBatch(stub, batchToSend));
+                    }
                 }
             }
-
-            // Enviar o restante
-            if (!batch.isEmpty()) {
-                List<ProdutoEstoque> batchToSend = batch;
-                executor.submit(() -> sendBatch(stub, batchToSend));
-            }
+            
+            con.commit(); // Finaliza a transação de leitura
 
         } catch (SQLException e) {
             e.printStackTrace();
