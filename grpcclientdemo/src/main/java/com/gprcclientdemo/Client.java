@@ -17,6 +17,9 @@ import java.sql.SQLException;
 import java.time.LocalDateTime;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
+import java.util.concurrent.TimeUnit;
 
 public class Client {
 
@@ -33,7 +36,7 @@ public class Client {
     ) {}
 
     static void main() {
-        String url = "jdbc:mysql://127.0.0.1:3306/autogeral";
+        String url = "jdbc:mysql://127.0.0.1:3380/autogeral";
         String user = "root";
         String password = "root";
         String query = """
@@ -67,6 +70,8 @@ public class Client {
             return;
         }
 
+        ExecutorService executor = Executors.newSingleThreadExecutor();
+
         LocalDateTime beforProcess = LocalDateTime.now();
         try (Connection con = DriverManager.getConnection(url, user, password);
              PreparedStatement stmt = con.prepareStatement(query);
@@ -87,22 +92,32 @@ public class Client {
                 batch.add(record);
 
                 if (batch.size() >= batchSize) {
-                    LocalDateTime befor = LocalDateTime.now();
-                    sendBatch(stub, batch);
-                    LocalDateTime after = LocalDateTime.now();
-                    IO.println("Time for batch to be sent: " + java.time.Duration.between(befor, after).toMillis() + " ms");
+                    List<ProdutoEstoque> batchToSend = batch;
+                    executor.submit(() -> {
+                        LocalDateTime befor = LocalDateTime.now();
+                        sendBatch(stub, batchToSend);
+                        LocalDateTime after = LocalDateTime.now();
+                        IO.println("Time for batch to be sent: " + java.time.Duration.between(befor, after).toMillis() + " ms");
+                    });
                     batch = new ArrayList<>();
                 }
             }
 
             // Enviar o restante
             if (!batch.isEmpty()) {
-                sendBatch(stub, batch);
+                List<ProdutoEstoque> batchToSend = batch;
+                executor.submit(() -> sendBatch(stub, batchToSend));
             }
 
         } catch (SQLException e) {
             e.printStackTrace();
         } finally {
+            executor.shutdown();
+            try {
+                executor.awaitTermination(1, TimeUnit.HOURS);
+            } catch (InterruptedException e) {
+                e.printStackTrace();
+            }
             channel.shutdownNow();
         }
         LocalDateTime afterProcess = LocalDateTime.now();
