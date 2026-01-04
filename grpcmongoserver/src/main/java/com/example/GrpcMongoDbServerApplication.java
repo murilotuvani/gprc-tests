@@ -1,13 +1,13 @@
-package com.example.grpcmongoserver;
+package com.example;
 
 import org.springframework.boot.SpringApplication;
 import org.springframework.boot.autoconfigure.SpringBootApplication;
 
 @SpringBootApplication
-public class GrpcmongoserverApplication {
+public class GrpcMongoDbServerApplication {
 
 	public static void main(String[] args) {
-		SpringApplication.run(GrpcmongoserverApplication.class, args);
+		SpringApplication.run(GrpcMongoDbServerApplication.class, args);
 	}
 
 }

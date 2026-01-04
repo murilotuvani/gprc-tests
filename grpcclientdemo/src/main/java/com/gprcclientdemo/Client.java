@@ -110,42 +110,36 @@ public class Client {
     }
 
     private static void sendBatch(SkuServiceGrpc.SkuServiceBlockingStub stub, List<ProdutoEstoque> lista) {
-        try {
-            SkuRequest.Builder requestBuilder = SkuRequest.newBuilder();
+        SkuRequest.Builder requestBuilder = SkuRequest.newBuilder();
 
-            for (ProdutoEstoque p : lista) {
-                Sku.Builder skuBuilder = Sku.newBuilder()
-                        .setSkuId(p.skuId())
-                        .setWarehouseId(p.warehouseId())
-                        .setItemId(p.itemId())
-                        .setAmount((int) p.amount())
-                        .setCountryCode(p.countryCode())
-                        .setAvailabilityType(Sku.AvailabilityType.valueOf(p.availabilityType()));
+        for (ProdutoEstoque p : lista) {
+            Sku.Builder skuBuilder = Sku.newBuilder()
+                    .setSkuId(p.skuId())
+                    .setWarehouseId(p.warehouseId())
+                    .setItemId(p.itemId())
+                    .setAmount((int) p.amount())
+                    .setCountryCode(p.countryCode())
+                    .setAvailabilityType(Sku.AvailabilityType.valueOf(p.availabilityType()));
 
-                Money money = Money.newBuilder()
-                        .setCurrencyCode(p.currencyCode())
-                        .setUnits((long) p.basePrice())
-                        .setNanos((int) ((p.basePrice() - (long) p.basePrice()) * 1_000_000_000))
+            Money money = Money.newBuilder()
+                    .setCurrencyCode(p.currencyCode())
+                    .setUnits((long) p.basePrice())
+                    .setNanos((int) ((p.basePrice() - (long) p.basePrice()) * 1_000_000_000))
+                    .build();
+            skuBuilder.setBasePrice(money);
+
+            if (p.alterado() != null) {
+                Timestamp timestamp = Timestamp.newBuilder()
+                        .setSeconds(p.alterado().getTime() / 1000)
+                        .setNanos(p.alterado().getNanos())
                         .build();
-                skuBuilder.setBasePrice(money);
-
-                if (p.alterado() != null) {
-                    Timestamp timestamp = Timestamp.newBuilder()
-                            .setSeconds(p.alterado().getTime() / 1000)
-                            .setNanos(p.alterado().getNanos())
-                            .build();
-                    skuBuilder.setLastUpdated(timestamp);
-                }
-
-                requestBuilder.addSkus(skuBuilder.build());
+                skuBuilder.setLastUpdated(timestamp);
             }
 
-            SkuResponse response = stub.importSkus(requestBuilder.build());
-            IO.println("Lote enviado. Resposta: " + response.getMessage());
-
-        } catch (Exception e) {
-            IO.println("Erro ao enviar lote para gRPC: " + e.getMessage());
-            e.printStackTrace();
+            requestBuilder.addSkus(skuBuilder.build());
         }
+
+        SkuResponse response = stub.importSkus(requestBuilder.build());
+        IO.println("Lote enviado. Resposta: " + response.getMessage());
     }
 }

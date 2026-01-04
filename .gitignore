@@ -1,2 +1,6 @@
 grpcmysqljdbcserver/logs/application.log
 grpcclientdemo/.idea/copilot.data.migration.ask2agent.xml
+grpcpsqljdbcserver/logs/application.log
+grpcmongoserver/logs/application.log
+grpcmongoserver/logs/application.log.2026-01-04.0.gz
+*.gz
