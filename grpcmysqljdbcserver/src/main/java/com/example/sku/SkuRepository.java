@@ -62,7 +62,7 @@ public class SkuRepository {
         return jdbcTemplate.query(sql, skuRowMapper, itemId);
     }
 
-    public int save(Sku sku) {
+    public int save(Sku... skus) {
         String sql = """
                 INSERT INTO skus (sku_id, warehouse_id, item_id, amount, country_code, availability_type, price_amount, currency_code, last_updated)
                 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
@@ -74,17 +74,21 @@ public class SkuRepository {
                         currency_code     = VALUES(currency_code),
                         last_updated      = VALUES(last_updated);
                 """;
-        return jdbcTemplate.update(sql,
-                sku.getId(),
-                sku.getWarehouseId(),
-                sku.getItemId(),
-                sku.getAmount(),
-                sku.getCountryCode(),
-                sku.getAvailabilityType().name(),
-                sku.getPriceAmount(),
-                sku.getCurrencyCode(),
-                sku.getLastUpdated() != null ? Timestamp.from(sku.getLastUpdated().toInstant()) : null
-        );
+        int result = 0;
+        for (Sku sku : skus) {
+            result += jdbcTemplate.update(sql,
+                    sku.getId(),
+                    sku.getWarehouseId(),
+                    sku.getItemId(),
+                    sku.getAmount(),
+                    sku.getCountryCode(),
+                    sku.getAvailabilityType().name(),
+                    sku.getPriceAmount(),
+                    sku.getCurrencyCode(),
+                    sku.getLastUpdated() != null ? Timestamp.from(sku.getLastUpdated().toInstant()) : null
+            );
+        }
+        return result;
     }
 
     public int update(Sku sku) {

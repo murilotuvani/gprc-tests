@@ -14,6 +14,7 @@ import java.sql.DriverManager;
 import java.sql.PreparedStatement;
 import java.sql.ResultSet;
 import java.sql.SQLException;
+import java.time.LocalDateTime;
 import java.util.ArrayList;
 import java.util.List;
 
@@ -32,7 +33,7 @@ public class Client {
     ) {}
 
     static void main() {
-        String url = "jdbc:mysql://127.0.0.1:3306/database";
+        String url = "jdbc:mysql://127.0.0.1:3306/autogeral";
         String user = "root";
         String password = "root";
         String query = """
@@ -66,6 +67,7 @@ public class Client {
             return;
         }
 
+        LocalDateTime beforProcess = LocalDateTime.now();
         try (Connection con = DriverManager.getConnection(url, user, password);
              PreparedStatement stmt = con.prepareStatement(query);
              ResultSet rs = stmt.executeQuery()) {
@@ -85,7 +87,10 @@ public class Client {
                 batch.add(record);
 
                 if (batch.size() >= batchSize) {
+                    LocalDateTime befor = LocalDateTime.now();
                     sendBatch(stub, batch);
+                    LocalDateTime after = LocalDateTime.now();
+                    IO.println("Time for batch to be sent: " + java.time.Duration.between(befor, after).toMillis() + " ms");
                     batch = new ArrayList<>();
                 }
             }
@@ -100,6 +105,8 @@ public class Client {
         } finally {
             channel.shutdownNow();
         }
+        LocalDateTime afterProcess = LocalDateTime.now();
+        IO.println("Total time for the process: " + java.time.Duration.between(beforProcess, afterProcess).toMillis() + " ms");
     }
 
     private static void sendBatch(SkuServiceGrpc.SkuServiceBlockingStub stub, List<ProdutoEstoque> lista) {

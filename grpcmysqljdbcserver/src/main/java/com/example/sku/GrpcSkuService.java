@@ -11,11 +11,14 @@ import com.example.sku.grpc.SkuServiceGrpc;
 import com.google.protobuf.Timestamp;
 import com.google.type.Money;
 import io.grpc.stub.StreamObserver;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Service;
 
 import java.math.BigDecimal;
 import java.time.Instant;
 import java.time.ZoneId;
+import java.util.ArrayList;
 import java.util.List;
 import java.util.Optional;
 import java.util.stream.Collectors;
@@ -23,6 +26,7 @@ import java.util.stream.Collectors;
 @Service
 public class GrpcSkuService extends SkuServiceGrpc.SkuServiceImplBase {
 
+    private static final Logger logger = LoggerFactory.getLogger(GrpcSkuService.class);
     private final SkuRepository skuRepository;
 
     public GrpcSkuService(SkuRepository skuRepository) {
@@ -32,32 +36,37 @@ public class GrpcSkuService extends SkuServiceGrpc.SkuServiceImplBase {
     @Override
     public void importSkus(SkuRequest request, StreamObserver<SkuResponse> responseObserver) {
         try {
-            for (Sku skuProto : request.getSkusList()) {
+            List<com.example.sku.Sku> skus = new ArrayList<>();
+            for (com.example.sku.grpc.Sku skuProto : request.getSkusList()) {
                 com.example.sku.Sku skuEntity = mapProtoToEntity(skuProto);
-                
-                if (skuEntity.getId() != null) {
-                    Optional<com.example.sku.Sku> existing = skuRepository.findById(skuEntity.getId());
-                    if (existing.isPresent()) {
-                        skuRepository.update(skuEntity);
-                    } else {
-                        skuRepository.save(skuEntity);
-                    }
-                }
+                skus.add(skuEntity);
+            }
+
+            String responseMassage = "";
+            if(skus.isEmpty()){
+                responseMassage = "No skus to import.";
+            } else {
+                int records = skuRepository.save(skus.toArray(new com.example.sku.Sku[0]));
+                responseMassage = "Imported " + records + " skus successfully.";
+
             }
 
             SkuResponse response = SkuResponse.newBuilder()
                     .setSuccess(true)
-                    .setMessage("Skus imported successfully")
+                    .setMessage(responseMassage)
                     .build();
             responseObserver.onNext(response);
             responseObserver.onCompleted();
+            logger.info("ImportSkus completed: {}", responseMassage);
         } catch (Exception e) {
+            String message = "Error importing skus: " + e.getMessage();
             SkuResponse response = SkuResponse.newBuilder()
                     .setSuccess(false)
-                    .setMessage("Error importing skus: " + e.getMessage())
+                    .setMessage(message)
                     .build();
             responseObserver.onNext(response);
             responseObserver.onCompleted();
+            logger.error("ImportSkus failed: {}", message, e);
         }
     }
 
@@ -70,6 +79,7 @@ public class GrpcSkuService extends SkuServiceGrpc.SkuServiceImplBase {
             responseObserver.onNext(Sku.getDefaultInstance());
         }
         responseObserver.onCompleted();
+        logger.info("GetById completed for skuId: {}", request.getSkuId());
     }
 
     @Override
@@ -84,6 +94,7 @@ public class GrpcSkuService extends SkuServiceGrpc.SkuServiceImplBase {
                 .build();
         responseObserver.onNext(response);
         responseObserver.onCompleted();
+        logger.info("GetByWarehouse completed for warehouseId: {}", request.getWarehouseId());
     }
 
     @Override
@@ -98,6 +109,7 @@ public class GrpcSkuService extends SkuServiceGrpc.SkuServiceImplBase {
                 .build();
         responseObserver.onNext(response);
         responseObserver.onCompleted();
+        logger.info("GetByItem completed for itemId: {}", request.getItemId());
     }
 
     private com.example.sku.Sku mapProtoToEntity(Sku proto) {
