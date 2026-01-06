@@ -1,0 +1,93 @@
+syntax = "proto3";
+
+package com.example.sku;
+
+option java_multiple_files = true;
+option java_package = "com.example.sku.grpc";
+option java_outer_classname = "SkuProto";
+
+// Importações necessárias
+import "google/protobuf/timestamp.proto";
+import "google/protobuf/wrappers.proto";
+
+// --- Definição de Money (incorporada para simplificar o build) ---
+// Represents an amount of money with its currency type.
+message Money {
+  // The three-letter currency code defined in ISO 4217.
+  string currency_code = 1;
+
+  // The whole units of the amount.
+  int64 units = 2;
+
+  // Number of nano (10^-9) units of the amount.
+  int32 nanos = 3;
+}
+
+// --- Mensagens de Serviço ---
+
+// Resposta simples para operações de escrita massiva
+message SkuResponse {
+  bool success = 1;
+  string message = 2; // Opcional: para detalhar erros
+}
+
+// Busca por ID Único (sku_id)
+message SkuGetByIdRequest {
+  uint64 sku_id = 1;
+}
+
+// Busca por Warehouse
+message SkuByWarehouseRequest {
+  uint64 warehouse_id = 1;
+}
+
+// Busca por Item
+message SkuByItemRequest {
+  uint64 item_id = 1;
+}
+
+// Resposta para buscas que podem retornar múltiplos Skus (como por warehouse ou item)
+message SkuListResponse {
+  repeated Sku skus = 1;
+}
+
+// --- Definição do Service ---
+
+service SkuService {
+  // Recebe uma lista de Skus e retorna sucesso ou falha
+  rpc ImportSkus(SkuRequest) returns (SkuResponse);
+
+  // Busca um Sku específico pelo ID
+  rpc GetById(SkuGetByIdRequest) returns (Sku);
+
+  // Busca Skus vinculados a um armazém (Warehouse)
+  rpc GetByWarehouse(SkuByWarehouseRequest) returns (SkuListResponse);
+
+  // Busca Skus vinculados a um item específico
+  rpc GetByItem(SkuByItemRequest) returns (SkuListResponse);
+}
+
+// --- Suas Mensagens Originais ---
+
+message Sku {
+  enum AvailabilityType {
+    READY_TO_SHIP = 0;
+    MADE_TO_ORDER = 1;
+    OPEN_BOX = 2;
+    USED = 3;
+    REFURBISHED = 4;
+  }
+
+  optional uint64 sku_id = 1;
+  optional uint64 warehouse_id = 2;
+  uint64 item_id = 3;
+  uint32 amount = 4;
+  string country_code = 5;
+  AvailabilityType availability_type = 6;
+  Money base_price = 7; // Alterado de google.type.Money para Money local
+  google.protobuf.Timestamp last_updated = 8;
+}
+
+message SkuRequest {
+  repeated Sku skus = 1;
+}
