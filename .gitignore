@@ -4,3 +4,7 @@ grpcpsqljdbcserver/logs/application.log
 grpcmongoserver/logs/application.log
 grpcmongoserver/logs/application.log.2026-01-04.0.gz
 *.gz
+grpc-rust-mongo-server/target/*
+grpc-rust-mongo-server/log/*
+grpc-rust-psql-server/target/*
+grpc-rust-psql-server/log/*

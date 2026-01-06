@@ -1,7 +1,7 @@
 use chrono::{DateTime, TimeZone, Utc};
 use deadpool_postgres::{Config, ManagerConfig, Pool, RecyclingMethod, Runtime};
 use std::error::Error;
-use tokio_postgres::NoTls;
+use tokio_postgres::{NoTls, types::Type};
 use tonic::{transport::Server, Request, Response, Status};
 
 // Estrutura de módulos simplificada
@@ -115,16 +115,30 @@ impl SkuService for MySkuService {
             Status::internal("Erro de transação")
         })?;
 
-        let stmt = tx.prepare(
+        // Usamos prepare_typed para forçar o tipo do parâmetro availability ($6) como TEXT.
+        // Isso evita que o driver tente serializar a String como o tipo customizado enum do Postgres,
+        // o que causaria erro de serialização. O cast ::availability_type no SQL fará a conversão final.
+        let stmt = tx.prepare_typed(
             "INSERT INTO skus (sku_id, warehouse_id, item_id, amount, country_code, availability, price_amount, currency_code, last_updated)
-             VALUES ($1, $2, $3, $4, $5, $6::availability_type, $7, $8, $9)
+             VALUES ($1, $2, $3, $4, $5, $6::text::availability_type, $7, $8, $9)
              ON CONFLICT (sku_id) DO UPDATE SET
                 warehouse_id   = EXCLUDED.warehouse_id,
                 amount         = EXCLUDED.amount,
                 availability   = EXCLUDED.availability,
                 price_amount   = EXCLUDED.price_amount,
                 currency_code  = EXCLUDED.currency_code,
-                last_updated   = EXCLUDED.last_updated"
+                last_updated   = EXCLUDED.last_updated",
+            &[
+                Type::INT8,        // $1 sku_id
+                Type::INT8,        // $2 warehouse_id
+                Type::INT8,        // $3 item_id
+                Type::INT4,        // $4 amount
+                Type::TEXT,        // $5 country_code
+                Type::TEXT,        // $6 availability (Enviamos como TEXT, Postgres converte para ENUM)
+                Type::FLOAT8,      // $7 price_amount
+                Type::TEXT,        // $8 currency_code
+                Type::TIMESTAMPTZ, // $9 last_updated
+            ]
         ).await.map_err(|e| {
             eprintln!("Erro ao preparar statement: {}", e);
             Status::internal("Erro ao preparar inserção")
@@ -184,7 +198,8 @@ impl SkuService for MySkuService {
         let sku_id = request.into_inner().sku_id;
         let client = self.pool.get().await.map_err(|e| Status::internal(e.to_string()))?;
 
-        let row = client.query_opt("SELECT sku_id, warehouse_id, item_id, amount, country_code, availability, price_amount, currency_code, last_updated FROM skus WHERE sku_id = $1 LIMIT 1", &[&(sku_id as i64)]).await.map_err(|e| {
+        // Adicionado cast ::text para availability para garantir que o driver receba string
+        let row = client.query_opt("SELECT sku_id, warehouse_id, item_id, amount, country_code, availability::text, price_amount, currency_code, last_updated FROM skus WHERE sku_id = $1 LIMIT 1", &[&(sku_id as i64)]).await.map_err(|e| {
             eprintln!("Erro ao buscar: {}", e);
             Status::internal("Erro ao buscar dados")
         })?;
@@ -202,7 +217,7 @@ impl SkuService for MySkuService {
         let warehouse_id = request.into_inner().warehouse_id;
         let client = self.pool.get().await.map_err(|e| Status::internal(e.to_string()))?;
 
-        let rows = client.query("SELECT sku_id, warehouse_id, item_id, amount, country_code, availability, price_amount, currency_code, last_updated FROM skus WHERE warehouse_id = $1", &[&(warehouse_id as i64)]).await.map_err(|e| {
+        let rows = client.query("SELECT sku_id, warehouse_id, item_id, amount, country_code, availability::text, price_amount, currency_code, last_updated FROM skus WHERE warehouse_id = $1", &[&(warehouse_id as i64)]).await.map_err(|e| {
             eprintln!("Erro ao buscar: {}", e);
             Status::internal("Erro ao buscar dados")
         })?;
@@ -219,7 +234,7 @@ impl SkuService for MySkuService {
         let item_id = request.into_inner().item_id;
         let client = self.pool.get().await.map_err(|e| Status::internal(e.to_string()))?;
 
-        let rows = client.query("SELECT sku_id, warehouse_id, item_id, amount, country_code, availability, price_amount, currency_code, last_updated FROM skus WHERE item_id = $1", &[&(item_id as i64)]).await.map_err(|e| {
+        let rows = client.query("SELECT sku_id, warehouse_id, item_id, amount, country_code, availability::text, price_amount, currency_code, last_updated FROM skus WHERE item_id = $1", &[&(item_id as i64)]).await.map_err(|e| {
             eprintln!("Erro ao buscar: {}", e);
             Status::internal("Erro ao buscar dados")
         })?;
@@ -258,15 +273,6 @@ async fn main() -> Result<(), Box<dyn Error>> {
         ").await?;
 
         // Cria a tabela com as novas colunas e constraints
-        // Nota: Se a tabela já existir com estrutura antiga, isso não vai alterar a estrutura (ALTER TABLE).
-        // Para fins deste exercício, assumimos que podemos recriar ou que o usuário vai lidar com migrações se a tabela já existir.
-        // Vou adicionar um DROP TABLE IF EXISTS para garantir que a nova estrutura seja usada, já que estamos em ambiente de teste/dev.
-        // Se fosse prod, faríamos ALTER TABLE.
-
-        // Como o usuário pediu para alterar a aplicação, vou assumir que posso ajustar a tabela.
-        // Vou tentar criar se não existir, mas se existir com colunas faltando, vai dar erro no INSERT.
-        // Vou fazer um comando seguro que tenta criar.
-
         client.batch_execute("
             CREATE TABLE IF NOT EXISTS skus (
                 sku_id BIGINT PRIMARY KEY,
