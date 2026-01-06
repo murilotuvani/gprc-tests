@@ -1,0 +1,19 @@
+[package]
+name = "grpc-rust-psql-server"
+version = "0.1.0"
+edition = "2024"
+
+[dependencies]
+tonic = "0.12"
+prost = "0.13"
+prost-types = "0.13"
+tokio = { version = "1.40", features = ["macros", "rt-multi-thread"] }
+tokio-postgres = { version = "0.7", features = ["with-chrono-0_4"] }
+deadpool-postgres = "0.12"
+serde = { version = "1.0", features = ["derive"] }
+futures = "0.3"
+chrono = "0.4"
+
+[build-dependencies]
+tonic-build = "0.12"
+protoc-bin-vendored = "3.0"
